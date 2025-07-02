@@ -1,12 +1,14 @@
 import Veterinario from "../models/Veterinario.js";
 import {sendMailToRegister, sendMailToRecoveryPassword } from "../config/nodemailer.js";
 import { crearTokenJWT } from "../middlewares/JWT.js"
+import mongoose from "mongoose"
 
 
 
 
 const registro = async (req,res)=>{
   const {email,password} = req.body
+  
   if (Object.values(req.body).includes("")) return res.status(400).json
   ({msg:"Todos los campos son obligatorios"})
 
@@ -118,10 +120,82 @@ const perfil =(req,res)=>{
     res.status(200).json(datosPerfil)
 }
 
+const actualizarPerfil = async (req, res) => {
+    const { id } = req.params;
+    const { nombre, apellido, direccion, celular, email } = req.body;
 
+    // validar la id de mongodb
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ msg: "ID invalido, intenta nuevamente" });
+    }
 
+    // validar campos vacios
+    if (Object.values(req.body).some(valor => valor === "")) {
+        return res.status(400).json({ msg: "Todos los campos son obligatorios" });
+    }
 
+    // buscar veterinario por su   id
+    const veterinarioBDD = await Veterinario.findById(id);
+    if (!veterinarioBDD) {
+        return res.status(404).json({ msg: `No existe el veterinario con id: ${id}` });
+    }
 
+    // validar email 
+    if (veterinarioBDD.email !== email) {
+        const existeEmail = await Veterinario.findOne({ email });
+        if (existeEmail) {
+            return res.status(400).json({ msg: "El email ya está registrado por otro usuario" });
+        }
+    }
+
+    // actualizar los campos a mostrar 
+    veterinarioBDD.nombre = nombre ?? veterinarioBDD.nombre;
+    veterinarioBDD.apellido = apellido ?? veterinarioBDD.apellido;
+    veterinarioBDD.direccion = direccion ?? veterinarioBDD.direccion;
+    veterinarioBDD.celular = celular ?? veterinarioBDD.celular;
+    veterinarioBDD.email = email ?? veterinarioBDD.email;
+    
+    //guardar
+    await veterinarioBDD.save();
+    console.log(veterinarioBDD)
+    res.status(200).json(veterinarioBDD)
+
+}
+
+const actualizarPassword = async (req, res) => {
+    try {
+        // buscar veterinario que ya inicio la secion 
+        const veterinarioBDD = await Veterinario.findById(req.veterinarioBDD._id);
+        if (!veterinarioBDD) {
+            return res.status(404).json({ msg: "No se encontró el usuario, intenta nuevamente" });
+        }
+        const { passwordactual, passwordnuevo, confirmpassword } = req.body;
+        //  campos vacios
+        if ([passwordactual, passwordnuevo, confirmpassword].some(campo => !campo || campo.trim() === "")) {
+            return res.status(400).json({ msg: "Todos los campos son obligatorios" });
+        }
+        //  password actual
+        const passwordCorrecto = await veterinarioBDD.matchPassword(passwordactual);
+        if (!passwordCorrecto) {
+            return res.status(401).json({ msg: "El password actual no es correcto" });
+        }
+        // coincidencia de  passwords
+        if (passwordnuevo !== confirmpassword) {
+            return res.status(400).json({ msg: "Los nuevos passwords no coinciden" });
+        }
+        // que password no sea igual al anterior
+        if (passwordactual === passwordnuevo) {
+            return res.status(400).json({ msg: "El nuevo password debe ser diferente al actual" });
+        }
+        // actualizar password
+        veterinarioBDD.password = await veterinarioBDD.encrypPassword(passwordnuevo);
+        await veterinarioBDD.save();
+
+        res.status(200).json({ msg: "¡Password actualizado con éxito!" });
+    } catch (error) {
+        res.status(500).json({ msg: "Error al actualizar el password", error: error.message });
+    }
+}
 
 export {
     registro,
@@ -130,5 +204,7 @@ export {
     comprobarTokenPasword,
     crearNuevoPassword,
     login,
-    perfil
+    perfil,
+    actualizarPerfil,
+    actualizarPassword
 }

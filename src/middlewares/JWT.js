@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken"
 import Veterinario from "../models/Veterinario.js"
+import Paciente from "../models/Paciente.js"
 
 const crearTokenJWT = (id, rol) => {
 
@@ -8,15 +9,19 @@ const crearTokenJWT = (id, rol) => {
 
 const verificarTokenJWT = async (req, res, next) => {
 
-		const { authorization } = req.headers
-		
-    if (!authorization) return res.status(401).json({ msg: "Acceso denegado: token no proporcionado o inválido" })
+    if (!req.headers.authorization) return res.status(401).json({ msg: "Acceso denegado: token no proporcionado o inválido" })
+
+    const { authorization } = req.headers
 
     try {
         const token = authorization.split(" ")[1];
         const { id, rol } = jwt.verify(token,process.env.JWT_SECRET)
         if (rol === "veterinario") {
             req.veterinarioBDD = await Veterinario.findById(id).lean().select("-password")
+            next()
+        }
+        else{
+            req.pacienteBDD = await Paciente.findById(id).lean().select("-password")
             next()
         }
     } catch (error) {
@@ -29,4 +34,3 @@ export {
     crearTokenJWT,
     verificarTokenJWT 
 }
-
